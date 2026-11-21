@@ -24,14 +24,119 @@
   --color-panel-border: #D5DEE9;
   --color-panel-text: #0F172A;
   --color-panel-muted: #475569;
+  --font-sans: 'Poppins', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Montserrat', system-ui, -apple-system, sans-serif;
+  --shadow-gold: 0 12px 40px rgba(201, 169, 97, 0.25);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-heading);
+  }
+
+  ::selection {
+    background-color: #C9A961;
+    color: #0A2540;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0A1929;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #C9A961;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #B8956A;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes lineShine {
-  0%, 100% {
-    background-position: 0% 50%;
+  0% {
+    background-position: 0% center;
+    box-shadow: 0 0 8px rgba(201, 169, 97, 0.45);
   }
   50% {
-    background-position: 100% 50%;
+    background-position: 100% center;
+    box-shadow: 0 0 18px rgba(201, 169, 97, 0.85), 0 0 30px rgba(201, 169, 97, 0.35);
+  }
+  100% {
+    background-position: 200% center;
+    box-shadow: 0 0 8px rgba(201, 169, 97, 0.45);
+  }
+}
+
+@keyframes moverHorizontal {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(3deg);
   }
 }
 
@@ -45,11 +150,67 @@
 }
 
 .animate-line-shine {
-  background: linear-gradient(90deg, #C9A961, #F0DFB0, #B8956A, #C9A961);
-  background-size: 200% 100%;
-  animation: lineShine 3s ease infinite;
+  background: linear-gradient(90deg, #0A2540, #C9A961, #d4af37, #C9A961, #0A2540);
+  background-size: 200% auto;
+  animation: lineShine 2.5s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.65s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+.animate-zoom-in {
+  animation: zoomIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-mover-horizontal {
+  animation: moverHorizontal 4s ease-in-out infinite;
 }
 
 .animate-blink {
   animation: blinkCursor 1s step-end infinite;
+}
+
+/* Barra superior dorada animada al hacer hover en tarjetas */
+.card-hover-border {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s ease;
+}
+
+.card-hover-border::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, #0A2540 0%, #C9A961 100%);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+}
+
+.card-hover-border:hover::before,
+.card-hover-border:focus-within::before {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-mover-horizontal,
+  .animate-line-shine,
+  .animate-fade-in-up,
+  .animate-zoom-in,
+  .animate-blink {
+    animation: none;
+  }
 }

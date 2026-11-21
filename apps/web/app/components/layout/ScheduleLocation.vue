@@ -6,30 +6,30 @@ import { CONTACT_INFO } from '~/data/contactos';
 <template>
   <section class="py-12 md:py-16 bg-[#F7F9FC] text-slate-900">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="rounded-[30px] border border-gold/20 bg-white p-6 sm:p-8 shadow-lg">
+      <div class="rounded-[30px] border border-gold/25 bg-white p-6 sm:p-8 shadow-lg shadow-gold/10">
         <h2 class="text-2xl sm:text-3xl font-bold text-[#0A2540] tracking-tight">
           Horarios y Ubicación
         </h2>
-        <div class="mt-2 h-1 w-16 rounded-full bg-gold" />
+        <div class="mt-2.5 h-1 w-16 rounded-full bg-gold" />
 
         <div class="mt-8 grid gap-6 lg:grid-cols-2 items-center">
           <div class="space-y-4">
             <div class="rounded-2xl border border-stone-200 bg-stone-50 p-5">
-              <div class="mb-3 flex items-center gap-3 text-gold">
-                <Clock class="h-6 w-6" aria-hidden="true" />
+              <div class="mb-3 flex items-center gap-3 text-gold-text">
+                <Clock class="h-6 w-6 text-gold" aria-hidden="true" />
                 <h3 class="text-lg font-semibold text-[#0A2540]">Horario de atención</h3>
               </div>
               <ul class="space-y-2 text-sm text-slate-600">
                 <li v-for="row in CONTACT_INFO.hours" :key="row.days">
-                  <strong>{{ row.days }}:</strong> {{ row.time }}
+                  <strong class="text-[#0A2540]">{{ row.days }}:</strong> {{ row.time }}
                 </li>
               </ul>
             </div>
 
             <div class="rounded-2xl border border-stone-200 bg-stone-50 p-5">
-              <div class="mb-3 flex items-center gap-3 text-gold">
-                <MapPin class="h-6 w-6" aria-hidden="true" />
-                <h3 class="text-lg font-semibold text-[#0A2540]">Sede Central</h3>
+              <div class="mb-3 flex items-center gap-3 text-gold-text">
+                <MapPin class="h-6 w-6 text-gold" aria-hidden="true" />
+                <h3 class="text-lg font-semibold text-[#0A2540]">Ubicación · Sede Central</h3>
               </div>
               <p class="text-sm leading-6 text-slate-600">
                 {{ CONTACT_INFO.address }}
