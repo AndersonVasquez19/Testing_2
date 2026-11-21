@@ -1,0 +1,420 @@
+openapi: 3.1.0
+info:
+  title: Horus Group - contratos HTTP existentes
+  version: 0.1.0
+  description: |
+    Documenta SOLO lo que ya existe y se verificó en el código el 11/11/2026. No es una especificación de diseño:
+    cualquier cambio de comportamiento se hace primero en la aplicación y después aquí.
+
+    Fuentes: `routes/api.php` y `app/Http/Controllers/Api/AuthController.php` (Laravel).
+
+    Fase 2 (12/11/2026): `/api/public/v1/*` (`routes/api.php` y `Api/Publico/*`) es la lectura y los formularios que
+    consume el servidor de apps/web (BFF); lo protege `X-Horus-Web-Token` y nunca se llama desde el navegador.
+    El asistente virtual (Horus AI) se retiró el 21/11/2026 y se sustituyó por un botón flotante de WhatsApp.
+
+    Fuera de este documento, a propósito: todo `/admin` (sesión, CSRF y permisos de Spatie; no es una API pública).
+    La API de los paneles de apps/web (`/api/panel/v1/*`) tiene su propio contrato: `horus-panel-api.yaml`.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Laravel local (`php artisan serve`)
+tags:
+  - name: auth
+    description: Autenticación JWT de Laravel (`/api/auth`).
+  - name: bff-publico
+    description: API pública para el servidor de apps/web (token de servicio, solo servidor a servidor).
+paths:
+  /api/auth/register:
+    post:
+      tags: [auth]
+      summary: Registrar una cuenta (nunca asigna roles)
+      description: |
+        Limitado por `throttle:register`. Responde 201 con usuario y token (la verificación de correo del registro se retiró el 13/11/2026).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, password_confirmation]
+              properties:
+                name: {type: string, maxLength: 120}
+                email: {type: string, format: email, maxLength: 255}
+                password: {type: string, description: "Sujeta a `PasswordPolicy`."}
+                password_confirmation: {type: string}
+      responses:
+        "201":
+          description: Cuenta creada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SesionJwt"}
+        "422": {$ref: "#/components/responses/ValidacionLaravel"}
+        "429": {description: Demasiados intentos.}
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión y obtener un JWT
+      description: Limitado por `throttle:login`. Las credenciales inválidas devuelven 422 con un mensaje genérico.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string}
+      responses:
+        "200":
+          description: Sesión emitida.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SesionJwt"}
+        "422": {$ref: "#/components/responses/ValidacionLaravel"}
+        "429": {description: Demasiados intentos.}
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Usuario del token actual
+      security: [{bearerJwt: []}]
+      responses:
+        "200":
+          description: Usuario autenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: {$ref: "#/components/schemas/Usuario"}
+        "401": {description: Token ausente, inválido, vencido o revocado (`jwt_version`).}
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Cerrar la sesión JWT
+      security: [{bearerJwt: []}]
+      responses:
+        "200":
+          description: Sesión cerrada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Mensaje"}
+        "401": {description: Token ausente, inválido, vencido o revocado.}
+  /api/public/v1/cursos:
+    get:
+      tags: [bff-publico]
+      summary: Fichas de cursos autorizadas para publicación
+      description: |
+        Solo fichas con autorización editorial vigentes (`CatalogoPublicoCursos::paraWeb()`); nunca precio, cupos,
+        matrículas ni datos administrativos. Con el catálogo apagado responde `habilitado: false` sin consultar datos.
+        Hasta 50 fichas.
+      security: [{webServiceToken: []}]
+      parameters:
+        - name: modalidad
+          in: query
+          required: false
+          schema: {type: string, enum: [presencial, semipresencial, virtual, hibrido]}
+      responses:
+        "200":
+          description: Catálogo (posiblemente vacío).
+          headers:
+            Cache-Control: {schema: {type: string, example: "no-store, private"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CatalogoCursos"}
+        "401": {description: Token de servicio ausente o incorrecto.}
+        "404": {description: Sin `HORUS_WEB_SERVICE_TOKEN` configurado (o de menos de 32 caracteres) la ruta no existe.}
+        "422": {$ref: "#/components/responses/ValidacionLaravel"}
+        "429": {description: Límite `publico-web` (300 por minuto).}
+        "503": {$ref: "#/components/responses/ErrorBff"}
+  /api/public/v1/pagos/{token}:
+    get:
+      tags: [bff-publico]
+      summary: Página de pago de una reserva de cupo (Fase 3)
+      description: |
+        El enlace secreto de 40 caracteres alfanuméricos es el único permiso: un token mal formado, desconocido o de otra reserva
+        responde siempre el mismo 404. Devuelve la referencia que la persona escribe en el pago, el vencimiento (hora de Lima,
+        ISO 8601), el curso y la edición, los importes de su propia matrícula (`monto` es `null` si todavía no tiene obligación de
+        pago) y los medios de cobro configurados (`metodos.yape` es `null` si no está configurado). Una reserva activa cuyo plazo ya
+        pasó se informa como `vencida` aunque el comando de vencimiento todavía no la haya procesado. Nunca expone datos
+        personales: solo el primer nombre del estudiante.
+      security: [{webServiceToken: []}]
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string, pattern: "^[A-Za-z0-9]{40}$"}
+      responses:
+        "200":
+          description: Datos de la página de pago.
+          headers:
+            Cache-Control: {schema: {type: string, example: "no-store, private"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PagoReserva"}
+        "401": {description: Token de servicio ausente o incorrecto.}
+        "404": {description: Enlace desconocido o mal formado (o sin `HORUS_WEB_SERVICE_TOKEN` configurado).}
+        "429": {description: Límite `pagos-bff` (30 por minuto y por visitante) o `publico-web`.}
+  /api/public/v1/reclamaciones/formulario:
+    get:
+      tags: [bff-publico]
+      summary: Estado del Libro de Reclamaciones y credenciales de un solo uso del formulario
+      description: |
+        Entrega la marca de tiempo firmada y el token de envío (UUID) que exige el alta. Con el libro apagado
+        (`RECLAMACIONES_ENABLED` o sin correo real) devuelve `habilitado: false` y no emite marca ni token.
+        `X-Horus-Visitante` (HMAC de 64 hex que calcula el BFF; nunca la IP) agrupa el límite
+        `reclamaciones-bff-formulario` (30 por minuto).
+      security: [{webServiceToken: []}]
+      parameters:
+        - name: X-Horus-Visitante
+          in: header
+          required: false
+          schema: {type: string, pattern: "^[a-f0-9]{64}$"}
+      responses:
+        "200":
+          description: Estado del libro.
+          headers:
+            Cache-Control: {schema: {type: string, example: "no-store, private"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FormularioReclamacion"}
+        "401": {description: Token de servicio ausente o incorrecto.}
+        "404": {description: Sin token de servicio configurado.}
+        "429": {description: Límite `reclamaciones-bff-formulario` o `publico-web`.}
+  /api/public/v1/reclamaciones:
+    post:
+      tags: [bff-publico]
+      summary: Registra una hoja del Libro de Reclamaciones (reclamo o queja)
+      description: |
+        Solo envío: no existe ninguna ruta pública para consultar reclamaciones. Reutiliza `GestionReclamaciones`
+        (numeración correlativa, plazo, idempotencia por `token_envio`, historial, copia por correo en bandeja y
+        auditoría sin IP). Las reglas de campos son las del alta Blade (`StoreReclamacionRequest`) más
+        `acepta_privacidad`. La reclamación queda `abierta`, sin responsable y sin clasificar por dominio; ni este
+        endpoint ni Horus AI asignan, cierran o modifican reclamaciones. Libro apagado: 404 antes de leer el cuerpo.
+        Límites tras validar: 3 por 10 min y 10 por día por visitante y 3 por día por correo; un reenvío del mismo
+        token (200) devuelve su cupo. `reclamaciones-bff-intentos` (20 por 10 min por visitante) acota los inválidos.
+      security: [{webServiceToken: []}]
+      parameters:
+        - name: X-Horus-Visitante
+          in: header
+          required: false
+          schema: {type: string, pattern: "^[a-f0-9]{64}$"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo, tipo_documento, numero_documento, nombres, apellidos, telefono, email, domicilio, detalle, pedido, marca, token_envio, acepta_privacidad]
+              properties:
+                tipo: {type: string, enum: [reclamo, queja]}
+                tipo_documento: {type: string, enum: [dni, ce, pasaporte, ruc]}
+                numero_documento: {type: string, maxLength: 20}
+                nombres: {type: string, minLength: 2, maxLength: 120}
+                apellidos: {type: string, minLength: 2, maxLength: 120}
+                telefono: {type: string, maxLength: 30}
+                email: {type: string, format: email, maxLength: 254}
+                domicilio: {type: string, minLength: 5, maxLength: 255}
+                es_menor: {type: boolean}
+                representante_nombre: {type: string, maxLength: 120, description: Obligatorio si `es_menor`.}
+                representante_domicilio: {type: string, maxLength: 255}
+                representante_telefono: {type: string, maxLength: 30}
+                representante_email: {type: string, format: email, maxLength: 254}
+                bien_tipo: {type: string, enum: [producto, servicio], description: Obligatorio en reclamos.}
+                bien_descripcion: {type: string, maxLength: 500, description: Obligatorio en reclamos.}
+                monto_bien: {type: string, description: "Hasta dos decimales; obligatorio en reclamos salvo `monto_no_aplica`."}
+                monto_no_aplica: {type: boolean}
+                detalle: {type: string, minLength: 10, maxLength: 3000}
+                pedido: {type: string, minLength: 5, maxLength: 1500}
+                acepta_privacidad: {type: boolean, description: Debe ser verdadero.}
+                marca: {type: string, description: Marca firmada de `/reclamaciones/formulario` (entre 5 s y 2 h de antigüedad).}
+                token_envio: {type: string, format: uuid}
+                sitio_web: {type: string, maxLength: 0, description: Señuelo anti-bots; debe ir vacío (el nombre lo informa `/formulario`).}
+      responses:
+        "200":
+          description: Reenvío del mismo `token_envio`; devuelve la hoja ya registrada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConfirmacionReclamacion"}
+        "201":
+          description: Hoja registrada.
+          headers:
+            Cache-Control: {schema: {type: string, example: "no-store, private"}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConfirmacionReclamacion"}
+        "401": {description: Token de servicio ausente o incorrecto.}
+        "404": {description: Libro apagado o sin token de servicio configurado.}
+        "422": {$ref: "#/components/responses/ValidacionLaravel"}
+        "429": {description: "Límite de envíos o de intentos (cabecera `Retry-After`); cuerpo `{error: {code: demasiadas_solicitudes}}`."}
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Horus-Service-Token
+      description: Secreto compartido (`HORUS_AI_SERVICE_TOKEN`).
+    webServiceToken:
+      type: apiKey
+      in: header
+      name: X-Horus-Web-Token
+      description: Secreto compartido entre Laravel y el servidor de apps/web (`HORUS_WEB_SERVICE_TOKEN`, 32 caracteres o más).
+  responses:
+    ValidacionLaravel:
+      description: Validación fallida (formato estándar de Laravel).
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: {type: string}
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: {type: string}
+    ErrorBff:
+      description: Fallo técnico del catálogo; código genérico, sin SQL, contenido ni excepciones.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: {type: string, enum: [catalogo_no_disponible]}
+                  message: {type: string}
+  schemas:
+    CursoPublico:
+      type: object
+      required: [titulo, resumen, modalidad, horario, inscripcion, vigente_desde, vigente_hasta]
+      properties:
+        titulo: {type: string, maxLength: 120}
+        resumen: {type: string, maxLength: 500}
+        modalidad: {type: string, enum: [presencial, semipresencial, virtual, hibrido]}
+        horario: {type: [string, "null"], maxLength: 200}
+        inscripcion: {type: [string, "null"], maxLength: 400}
+        vigente_desde: {type: string, format: date}
+        vigente_hasta: {type: string, format: date}
+    CatalogoCursos:
+      type: object
+      required: [habilitado, modalidad, total, cursos]
+      properties:
+        habilitado: {type: boolean}
+        modalidad: {type: [string, "null"]}
+        total: {type: integer}
+        cursos:
+          type: array
+          maxItems: 50
+          items: {$ref: "#/components/schemas/CursoPublico"}
+    PagoReserva:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [estado, vigente, referencia, vence_en, estudiante, curso, edicion, monto, metodos]
+          properties:
+            estado: {type: string, enum: [activa, con_pago, vencida, cerrada]}
+            vigente: {type: boolean, description: "`true` solo si la reserva está activa y su plazo no pasó."}
+            referencia: {type: string, pattern: "^HRS-[A-HJ-NP-Z2-9]{6}$", description: La referencia que se escribe en el pago.}
+            vence_en: {type: string, format: date-time, description: Vencimiento en hora de Lima.}
+            estudiante: {type: string, description: Solo el primer nombre.}
+            curso: {type: [string, "null"]}
+            edicion: {type: [string, "null"]}
+            monto:
+              type: [object, "null"]
+              description: "`null` si la matrícula todavía no tiene obligación de pago."
+              required: [moneda, total, pagado, por_confirmar, saldo]
+              properties:
+                moneda: {type: string, enum: [PEN]}
+                total: {type: string, example: "300.00"}
+                pagado: {type: string, example: "0.00"}
+                por_confirmar: {type: string, example: "0.00"}
+                saldo: {type: string, example: "300.00"}
+            metodos:
+              type: object
+              required: [yape]
+              properties:
+                yape:
+                  type: [object, "null"]
+                  description: "`null` si no está configurado."
+                  required: [numero, titular]
+                  properties:
+                    numero: {type: string}
+                    titular: {type: string}
+    FormularioReclamacion:
+      type: object
+      required: [habilitado, marca, token_envio, correo_activo, plazo_dias_habiles, honeypot]
+      properties:
+        habilitado: {type: boolean}
+        marca: {type: string, nullable: true}
+        token_envio: {type: string, format: uuid, nullable: true}
+        correo_activo: {type: boolean, description: Si la copia automática por correo está activa.}
+        plazo_dias_habiles: {type: integer, example: 15}
+        honeypot: {type: string, example: sitio_web}
+    ConfirmacionReclamacion:
+      type: object
+      description: Sin datos personales; solo lo necesario para que el consumidor conserve su registro.
+      required: [numero, tipo, fecha_limite, repetida, correo_activo]
+      properties:
+        numero: {type: string, example: 000000001-2026}
+        tipo: {type: string, enum: [reclamo, queja]}
+        fecha_limite: {type: string, format: date}
+        repetida: {type: boolean}
+        correo_activo: {type: boolean}
+    FormularioMatricula:
+      type: object
+      required: [habilitado, marca, cursos]
+      properties:
+        habilitado: {type: boolean}
+        marca: {type: string, nullable: true}
+        cursos:
+          type: array
+          items:
+            type: object
+            required: [valor, titulo, resumen, modalidad, horario, inscripcion, vigente_hasta]
+            properties:
+              valor: {type: string, pattern: "^[a-f0-9]{64}$"}
+              titulo: {type: string}
+              resumen: {type: string}
+              modalidad: {type: string}
+              horario: {type: string, nullable: true}
+              inscripcion: {type: string, nullable: true}
+              vigente_hasta: {type: string, format: date}
+    ConfirmacionMatricula:
+      type: object
+      description: Sin datos personales. No indica matrícula ni cupo.
+      required: [codigo, curso, modalidad, repetida]
+      properties:
+        codigo: {type: string, example: SM-1A2B3C4D}
+        curso: {type: string}
+        modalidad: {type: string}
+        repetida: {type: boolean}
+    Mensaje:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string}
+    Usuario:
+      type: object
+      required: [id, name, email]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        email: {type: string, format: email}
+    SesionJwt:
+      type: object
+      required: [user, access_token, token_type, expires_in]
+      properties:
+        user: {$ref: "#/components/schemas/Usuario"}
+        access_token: {type: string}
+        token_type: {type: string, enum: [Bearer]}
+        expires_in: {type: integer, description: Segundos hasta el vencimiento.}
