@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold: #C9A961;
+  --color-gold-dark: #B8956A;
+  --color-gold-text: #856424;
+  --color-gold-light: #E8DCC4;
+  --color-ink: #0A2540;
+  --color-ink-light: #153A59;
+  --color-ink-dark: #0A1929;
+  --color-academico-50: #EEF4FA;
+  --color-academico-100: #D9E6F3;
+  --color-academico-200: #B4CDE6;
+  --color-academico-300: #86ABD0;
+  --color-academico-400: #5586B6;
+  --color-academico-500: #346A9E;
+  --color-academico-600: #265684;
+  --color-academico-700: #1B4469;
+  --color-academico-800: #133354;
+  --color-academico-900: #0D2744;
+  --color-academico-950: #081A30;
+  --color-panel-bg: #EEF2F7;
+  --color-panel-surface: #FFFFFF;
+  --color-panel-border: #D5DEE9;
+  --color-panel-text: #0F172A;
+  --color-panel-muted: #475569;
+}
+
+@keyframes lineShine {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes blinkCursor {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.animate-line-shine {
+  background: linear-gradient(90deg, #C9A961, #F0DFB0, #B8956A, #C9A961);
+  background-size: 200% 100%;
+  animation: lineShine 3s ease infinite;
+}
+
+.animate-blink {
+  animation: blinkCursor 1s step-end infinite;
+}

@@ -1,60 +1,81 @@
-# Integración continua del frontend Next.js (apps/web).
-#
-# Alcance: lo que se comprueba sin servicios del propietario: referencias de imágenes, tipos y compilación.
-# `next build` descarga fuentes de Google (next/font/google) porque el runner tiene red; en local se ejecuta sin red y
-# compila igualmente. No se despliega nada y el workflow no usa secretos.
-name: CI Web
+name: CI Web (Nuxt + Vitest + Playwright)
 
-# SUSPENDIDO (11/11/2026, decisión del propietario): solo se ejecuta a mano desde la pestaña Actions
-# («Run workflow»). Para reactivarlo, restaura:
-#   pull_request:
-#     paths: ['apps/web/**', 'packages/contracts/**', '.github/workflows/ci-web.yml']
-#   push:
-#     branches: [main, anderson]
-#     paths: ['apps/web/**', 'packages/contracts/**', '.github/workflows/ci-web.yml']
 on:
+  push:
+    branches: [main]
+    paths: ['apps/web/**', 'apps/api/**', '.github/workflows/ci-web.yml']
+  pull_request:
+    branches: [main]
+    paths: ['apps/web/**', '.github/workflows/ci-web.yml']
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-web-${{ github.ref }}
-  cancel-in-progress: true
+services:
+  postgres:
+    image: postgres:16
+    env:
+      POSTGRES_DB: horus_sistema
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    ports:
+      - 5432:5432
+    options: >-
+      --health-cmd pg_isready
+      --health-interval 10s
+      --health-timeout 5s
+      --health-retries 5
 
 jobs:
   web:
-    name: Web (referencias, tipos y compilación)
+    name: Typecheck, Vitest, Build y Playwright E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: apps/web
-    env:
-      NEXT_TELEMETRY_DISABLED: '1'
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v7
+      - name: Instalar PHP 8.4 para backend E2E
+        uses: shivammathur/setup-php@v2
         with:
-          node-version: '24'
+          php-version: '8.4'
+          extensions: mbstring, intl, bcmath, zip, gd, pdo_pgsql, pgsql
+          tools: composer:v2
+
+      - name: Preparar API Laravel
+        working-directory: apps/api
+        run: |
+          composer install --no-interaction --no-progress --prefer-dist
+          cp .env.example .env
+          php artisan key:generate --ansi
+          php artisan migrate --seed --force
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
-      - name: Instalar dependencias
-        run: npm ci
+      - name: Instalar dependencias Web y Playwright
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx playwright install chromium
 
-      - name: Referencias de imágenes
-        run: npm run verify:assets
+      - name: Nuxt Typecheck y ESLint
+        working-directory: apps/web
+        run: |
+          npm run typecheck
+          npm run lint
 
-      - name: Tipos
-        run: npx tsc --noEmit
+      - name: Pruebas unitarias (Vitest)
+        working-directory: apps/web
+        run: npm run test:unit
 
-      - name: Compilar
+      - name: Compilar Nuxt
+        working-directory: apps/web
         run: npm run build
 
-      # Informativo: ESLint informa 9 errores y 9 avisos preexistentes (PROJECT_CONTEXT.md, etapa 5). No bloquea
-      # hasta que se corrijan como tarea aparte.
-      - name: ESLint (informativo)
-        continue-on-error: true
-        run: npm run lint
+      - name: Pruebas E2E (Playwright contra Laravel 13 + PostgreSQL)
+        working-directory: apps/web
+        run: npm run test:e2e

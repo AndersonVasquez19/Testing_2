@@ -1,24 +1,7 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import withNuxt from './.nuxt/eslint.config.mjs';
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Los scripts de `scripts/` son herramientas de Node en CommonJS (`require`), no código de la aplicación.
-  {
-    files: ["scripts/**/*.js"],
-    rules: { "@typescript-eslint/no-require-imports": "off" },
+export default withNuxt({
+  rules: {
+    'vue/multi-word-component-names': 'off',
   },
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    ".next-e2e/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-]);
-
-export default eslintConfig;
+});

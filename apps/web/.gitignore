@@ -16,9 +16,10 @@
 /playwright-report/
 /e2e/capturas/
 
-# next.js
-/.next/
-/.next-e2e/
+# nuxt
+/.nuxt/
+/.output/
+/.nuxtrc
 /out/
 
 # production
